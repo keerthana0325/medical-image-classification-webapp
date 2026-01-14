@@ -4,6 +4,14 @@ import json , os , datetime, math
 from flask_mail import Mail, Message
 from werkzeug.utils import secure_filename
 
+#-----------------------------
+
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
+import numpy as np
+
+model = load_model('models/kidney_model.h5')  # Update path if needed
+
 
 # Load configuration from JSON
 with open('config.json', "r") as c:
@@ -185,6 +193,39 @@ def delete(sno):
         db.session.delete(post)
         db.session.commit()
     return redirect("/dashboard")
+
+# 25th april
+
+def preprocess_image(img_path):
+    img = image.load_img(img_path, target_size=(150,150))  # match training size
+    img_array = image.img_to_array(img)
+    img_array = img_array / 255.0  # normalize
+    img_array = np.expand_dims(img_array, axis=0)  # add batch dimension
+    return img_array
+
+@app.route("/disease-detection", methods=['GET', 'POST'])
+def disease_detection():
+    if request.method == 'POST':
+        disease = request.form.get('disease')  # You may ignore if not using
+        file = request.files.get('file')
+
+        if file:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            # Preprocess and predict
+            processed_image = preprocess_image(filepath)
+            prediction = model.predict(processed_image)
+            predicted_label = 'stone' if prediction[0] > 0.5 else 'normal'
+
+
+
+            return render_template("disease_result.html", result=predicted_label, params=params)
+
+    return render_template("detection.html", params=params)
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
